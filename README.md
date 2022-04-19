@@ -10,12 +10,9 @@ This project releases GeoIP files automatically every Thursday. It also provides
 - 新增类别（方便有特殊需求的用户使用）：
   - `geoip:cloudflare`（`GEOIP,CLOUDFLARE`）
   - `geoip:cloudfront`（`GEOIP,CLOUDFRONT`）
-  - `geoip:facebook`（`GEOIP,FACEBOOK`）
   - `geoip:fastly`（`GEOIP,FASTLY`）
-  - `geoip:google`（`GEOIP,GOOGLE`）
   - `geoip:netflix`（`GEOIP,NETFLIX`）
   - `geoip:telegram`（`GEOIP,TELEGRAM`）
-  - `geoip:twitter`（`GEOIP,TWITTER`）
 
 ## 参考配置
 
@@ -40,11 +37,8 @@ This project releases GeoIP files automatically every Thursday. It also provides
       "type": "field",
       "outboundTag": "Proxy",
       "ip": [
-        "geoip:us",
         "geoip:jp",
-        "geoip:facebook",
         "geoip:telegram",
-        "ext:geoip-asn.dat:facebook",
         "ext:geoip-asn.dat:telegram"
       ]
     }
@@ -57,7 +51,7 @@ This project releases GeoIP files automatically every Thursday. It also provides
 ```yaml
 rules:
   - GEOIP,PRIVATE,policy,no-resolve
-  - GEOIP,FACEBOOK,policy
+  - GEOIP,TELEGRAM,policy
   - GEOIP,CN,policy,no-resolve
 ```
 
