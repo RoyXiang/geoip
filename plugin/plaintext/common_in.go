@@ -41,7 +41,7 @@ func (t *textIn) scanFileForTextIn(reader io.Reader, entry *lib.Entry) error {
 	scanner := bufio.NewScanner(reader)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
+		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
 		if err := entry.AddPrefix(line); err != nil {
