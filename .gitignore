@@ -19,4 +19,5 @@
 data/
 geolite2/
 output/
+tmp/
 geoip
