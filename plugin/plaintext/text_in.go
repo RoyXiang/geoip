@@ -124,11 +124,11 @@ func (t *textIn) Input(container lib.Container) (lib.Container, error) {
 }
 
 func (t *textIn) walkDir(dir string, entries map[string]*lib.Entry) error {
-	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+	err := filepath.WalkDir(dir, func(path string, entry os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if info.IsDir() {
+		if entry.IsDir() {
 			return nil
 		}
 

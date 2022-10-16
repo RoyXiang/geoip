@@ -31,24 +31,6 @@
       "type": "text",
       "action": "add",
       "args": {
-        "name": "jp",
-        "uri": "https://raw.githubusercontent.com/tmplink/IPDB/main/ipv4/cidr/JP.txt",
-        "onlyIPType": "ipv4"
-      }
-    },
-    {
-      "type": "text",
-      "action": "add",
-      "args": {
-        "name": "jp",
-        "uri": "https://raw.githubusercontent.com/tmplink/IPDB/main/ipv6/cidr/JP.txt",
-        "onlyIPType": "ipv6"
-      }
-    },
-    {
-      "type": "text",
-      "action": "add",
-      "args": {
         "inputDir": "./data"
       }
     },
@@ -105,37 +87,9 @@
           "private",
           "cloudflare",
           "cloudfront",
-          "facebook",
           "fastly",
-          "google",
           "netflix",
-          "telegram",
-          "twitter"
-        ]
-      }
-    },
-    {
-      "type": "maxmindMMDB",
-      "action": "output",
-      "args": {
-        "outputName": "Country-only-cn-private.mmdb",
-        "wantedList": ["cn", "private"]
-      }
-    },
-    {
-      "type": "maxmindMMDB",
-      "action": "output",
-      "args": {
-        "outputName": "Country-asn.mmdb",
-        "wantedList": [
-          "cloudflare",
-          "cloudfront",
-          "facebook",
-          "fastly",
-          "google",
-          "netflix",
-          "telegram",
-          "twitter"
+          "telegram"
         ]
       }
     },
