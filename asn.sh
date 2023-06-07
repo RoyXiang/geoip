@@ -21,5 +21,3 @@ while IFS= read -r line; do
     jq --raw-output '.data.prefixes.v6.originating[]' ./tmp/${filename}-${asn}.txt | sort -u >>${file}
   done
 done <${input}
-
-echo "5.28.192.0/21" >> ./data/telegram

@@ -77,6 +77,21 @@
       }
     },
     {
+      "type": "text",
+      "action": "remove",
+      "args": {
+        "name": "cn",
+        "uri": "./extra/ads"
+      }
+    },
+    {
+      "type": "text",
+      "action": "add",
+      "args": {
+        "inputDir": "./extra"
+      }
+    },
+    {
       "type": "private",
       "action": "add"
     }
