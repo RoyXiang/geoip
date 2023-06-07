@@ -78,14 +78,6 @@
     },
     {
       "type": "text",
-      "action": "remove",
-      "args": {
-        "name": "cn",
-        "uri": "./extra/ads"
-      }
-    },
-    {
-      "type": "text",
       "action": "add",
       "args": {
         "inputDir": "./extra"
@@ -105,48 +97,19 @@
       }
     },
     {
-      "type": "v2rayGeoIPDat",
-      "action": "output",
-      "args": {
-        "outputName": "geoip-only-cn-private.dat",
-        "wantedList": ["cn", "private"]
-      }
-    },
-    {
-      "type": "v2rayGeoIPDat",
-      "action": "output",
-      "args": {
-        "outputName": "geoip-asn.dat",
-        "wantedList": [
-          "cloudflare",
-          "cloudfront",
-          "fastly",
-          "netflix",
-          "telegram"
-        ]
-      }
-    },
-    {
-      "type": "v2rayGeoIPDat",
-      "action": "output",
-      "args": {
-        "oneFilePerList": true,
-        "wantedList": ["cn", "private"]
-      }
-    },
-    {
       "type": "maxmindMMDB",
       "action": "output",
       "args": {
         "outputName": "Country.mmdb",
-        "overwriteList": [
+        "wantedList": [
           "cn",
-          "private",
           "cloudflare",
           "cloudfront",
           "fastly",
           "netflix",
-          "telegram"
+          "telegram",
+          "ads",
+          "private"
         ]
       }
     },
