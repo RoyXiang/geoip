@@ -77,13 +77,6 @@
       }
     },
     {
-      "type": "text",
-      "action": "add",
-      "args": {
-        "inputDir": "./extra"
-      }
-    },
-    {
       "type": "private",
       "action": "add"
     }
