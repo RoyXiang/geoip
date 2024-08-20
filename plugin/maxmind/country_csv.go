@@ -3,7 +3,8 @@ package maxmind
 import (
 	"encoding/csv"
 	"encoding/json"
-	"errors"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,9 +18,9 @@ const (
 )
 
 var (
-	defaultCCFile   = filepath.Join("./", "geolite2", "GeoLite2-Country-Locations-en.csv")
-	defaultIPv4File = filepath.Join("./", "geolite2", "GeoLite2-Country-Blocks-IPv4.csv")
-	defaultIPv6File = filepath.Join("./", "geolite2", "GeoLite2-Country-Blocks-IPv6.csv")
+	defaultCCFile          = filepath.Join("./", "geolite2", "GeoLite2-Country-Locations-en.csv")
+	defaultCountryIPv4File = filepath.Join("./", "geolite2", "GeoLite2-Country-Blocks-IPv4.csv")
+	defaultCountryIPv6File = filepath.Join("./", "geolite2", "GeoLite2-Country-Blocks-IPv6.csv")
 )
 
 func init() {
@@ -51,11 +52,19 @@ func newGeoLite2CountryCSV(action lib.Action, data json.RawMessage) (lib.InputCo
 	}
 
 	if tmp.IPv4File == "" {
-		tmp.IPv4File = defaultIPv4File
+		tmp.IPv4File = defaultCountryIPv4File
 	}
 
 	if tmp.IPv6File == "" {
-		tmp.IPv6File = defaultIPv6File
+		tmp.IPv6File = defaultCountryIPv6File
+	}
+
+	// Filter want list
+	wantList := make(map[string]bool)
+	for _, want := range tmp.Want {
+		if want = strings.ToUpper(strings.TrimSpace(want)); want != "" {
+			wantList[want] = true
+		}
 	}
 
 	return &geoLite2CountryCSV{
@@ -65,7 +74,7 @@ func newGeoLite2CountryCSV(action lib.Action, data json.RawMessage) (lib.InputCo
 		CountryCodeFile: tmp.CountryCodeFile,
 		IPv4File:        tmp.IPv4File,
 		IPv6File:        tmp.IPv6File,
-		Want:            tmp.Want,
+		Want:            wantList,
 		OnlyIPType:      tmp.OnlyIPType,
 	}, nil
 }
@@ -77,7 +86,7 @@ type geoLite2CountryCSV struct {
 	CountryCodeFile string
 	IPv4File        string
 	IPv6File        string
-	Want            []string
+	Want            map[string]bool
 	OnlyIPType      lib.IPType
 }
 
@@ -99,7 +108,7 @@ func (g *geoLite2CountryCSV) Input(container lib.Container) (lib.Container, erro
 		return nil, err
 	}
 
-	entries := make(map[string]*lib.Entry)
+	entries := make(map[string]*lib.Entry, len(ccMap))
 
 	if g.IPv4File != "" {
 		if err := g.process(g.IPv4File, ccMap, entries); err != nil {
@@ -113,6 +122,10 @@ func (g *geoLite2CountryCSV) Input(container lib.Container) (lib.Container, erro
 		}
 	}
 
+	if len(entries) == 0 {
+		return nil, fmt.Errorf("❌ [type %s | action %s] no entry is generated", typeCountryCSV, g.Action)
+	}
+
 	var ignoreIPType lib.IgnoreIPOption
 	switch g.OnlyIPType {
 	case lib.IPv4:
@@ -121,14 +134,16 @@ func (g *geoLite2CountryCSV) Input(container lib.Container) (lib.Container, erro
 		ignoreIPType = lib.IgnoreIPv4
 	}
 
-	for name, entry := range entries {
+	for _, entry := range entries {
 		switch g.Action {
 		case lib.ActionAdd:
 			if err := container.Add(entry, ignoreIPType); err != nil {
 				return nil, err
 			}
 		case lib.ActionRemove:
-			container.Remove(name, ignoreIPType)
+			if err := container.Remove(entry, lib.CaseRemovePrefix, ignoreIPType); err != nil {
+				return nil, err
+			}
 		default:
 			return nil, lib.ErrUnknownAction
 		}
@@ -138,13 +153,21 @@ func (g *geoLite2CountryCSV) Input(container lib.Container) (lib.Container, erro
 }
 
 func (g *geoLite2CountryCSV) getCountryCode() (map[string]string, error) {
-	ccReader, err := os.Open(g.CountryCodeFile)
+	var f io.ReadCloser
+	var err error
+	switch {
+	case strings.HasPrefix(strings.ToLower(g.CountryCodeFile), "http://"), strings.HasPrefix(strings.ToLower(g.CountryCodeFile), "https://"):
+		f, err = lib.GetRemoteURLReader(g.CountryCodeFile)
+	default:
+		f, err = os.Open(g.CountryCodeFile)
+	}
+
 	if err != nil {
 		return nil, err
 	}
-	defer ccReader.Close()
+	defer f.Close()
 
-	reader := csv.NewReader(ccReader)
+	reader := csv.NewReader(f)
 	lines, err := reader.ReadAll()
 	if err != nil {
 		return nil, err
@@ -152,60 +175,91 @@ func (g *geoLite2CountryCSV) getCountryCode() (map[string]string, error) {
 
 	ccMap := make(map[string]string)
 	for _, line := range lines[1:] {
+		if len(line) < 5 {
+			return nil, fmt.Errorf("❌ [type %s | action %s] invalid record: %v", typeCountryCSV, g.Action, line)
+		}
+
 		id := strings.TrimSpace(line[0])
-		countryCode := strings.TrimSpace(line[4])
+		countryCode := strings.ToUpper(strings.TrimSpace(line[4]))
 		if id == "" || countryCode == "" {
 			continue
 		}
-		ccMap[id] = strings.ToUpper(countryCode)
+
+		if len(g.Want) > 0 && !g.Want[countryCode] {
+			continue
+		}
+
+		ccMap[id] = countryCode
 	}
+
+	if len(ccMap) == 0 {
+		return nil, fmt.Errorf("❌ [type %s | action %s] invalid country code data", typeCountryCSV, g.Action)
+	}
+
 	return ccMap, nil
 }
 
 func (g *geoLite2CountryCSV) process(file string, ccMap map[string]string, entries map[string]*lib.Entry) error {
 	if len(ccMap) == 0 {
-		return errors.New("country code list must be specified")
+		return fmt.Errorf("❌ [type %s | action %s] invalid country code data", typeCountryCSV, g.Action)
 	}
 	if entries == nil {
-		entries = make(map[string]*lib.Entry)
+		entries = make(map[string]*lib.Entry, len(ccMap))
 	}
 
-	fReader, err := os.Open(file)
+	var f io.ReadCloser
+	var err error
+	switch {
+	case strings.HasPrefix(strings.ToLower(file), "http://"), strings.HasPrefix(strings.ToLower(file), "https://"):
+		f, err = lib.GetRemoteURLReader(file)
+	default:
+		f, err = os.Open(file)
+	}
+
 	if err != nil {
 		return err
 	}
-	defer fReader.Close()
+	defer f.Close()
 
-	reader := csv.NewReader(fReader)
-	lines, err := reader.ReadAll()
-	if err != nil {
-		return err
-	}
+	reader := csv.NewReader(f)
+	reader.Read() // skip header
 
-	// Filter want list
-	wantList := make(map[string]bool)
-	for _, want := range g.Want {
-		if want = strings.ToUpper(strings.TrimSpace(want)); want != "" {
-			wantList[want] = true
+	for {
+		record, err := reader.Read()
+		if err == io.EOF {
+			break
 		}
-	}
+		if err != nil {
+			return err
+		}
 
-	for _, line := range lines[1:] {
-		ccID := strings.TrimSpace(line[1])
+		if len(record) < 4 {
+			return fmt.Errorf("❌ [type %s | action %s] invalid record: %v", typeCountryCSV, g.Action, record)
+		}
+
+		ccID := ""
+		switch {
+		case strings.TrimSpace(record[1]) != "":
+			ccID = strings.TrimSpace(record[1])
+		case strings.TrimSpace(record[2]) != "":
+			ccID = strings.TrimSpace(record[2])
+		case strings.TrimSpace(record[3]) != "":
+			ccID = strings.TrimSpace(record[3])
+		default:
+			continue
+		}
+
 		if countryCode, found := ccMap[ccID]; found {
-			if len(wantList) > 0 {
-				if _, found := wantList[countryCode]; !found {
-					continue
-				}
-			}
-			cidrStr := strings.ToLower(strings.TrimSpace(line[0]))
-			entry, found := entries[countryCode]
-			if !found {
+			cidrStr := strings.ToLower(strings.TrimSpace(record[0]))
+			entry, got := entries[countryCode]
+			if !got {
 				entry = lib.NewEntry(countryCode)
 			}
+
 			if err := entry.AddPrefix(cidrStr); err != nil {
 				return err
 			}
+
 			entries[countryCode] = entry
 		}
 	}

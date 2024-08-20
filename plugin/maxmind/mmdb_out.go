@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/Loyalsoldier/geoip/lib"
@@ -139,7 +140,7 @@ func (m *mmdbOut) getEntryNameListInOrder(container lib.Container) []string {
 		The order of names in wantedList has a higher priority than which of the overwriteList.
 	*/
 
-	wantList := make([]string, 0, 200)
+	wantList := make([]string, 0, len(m.Want))
 	for _, want := range m.Want {
 		if want = strings.ToUpper(strings.TrimSpace(want)); want != "" {
 			wantList = append(wantList, want)
@@ -150,7 +151,7 @@ func (m *mmdbOut) getEntryNameListInOrder(container lib.Container) []string {
 		return wantList
 	}
 
-	overwriteList := make([]string, 0, 200)
+	overwriteList := make([]string, 0, len(m.Overwrite))
 	overwriteMap := make(map[string]bool)
 	for _, overwrite := range m.Overwrite {
 		if overwrite = strings.ToUpper(strings.TrimSpace(overwrite)); overwrite != "" {
@@ -159,7 +160,7 @@ func (m *mmdbOut) getEntryNameListInOrder(container lib.Container) []string {
 		}
 	}
 
-	list := make([]string, 0, 200)
+	list := make([]string, 0, 300)
 	for entry := range container.Loop() {
 		name := entry.GetName()
 		_, found := overwriteMap[name]
@@ -168,6 +169,9 @@ func (m *mmdbOut) getEntryNameListInOrder(container lib.Container) []string {
 		}
 		list = append(list, name)
 	}
+
+	// Sort the lists
+	slices.Sort(list)
 
 	// Make sure the names in overwriteList are written at last
 	list = append(list, overwriteList...)

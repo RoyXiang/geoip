@@ -45,12 +45,20 @@ func newGeoIPDatIn(action lib.Action, data json.RawMessage) (lib.InputConverter,
 		return nil, fmt.Errorf("[type %s | action %s] uri must be specified in config", typeGeoIPdatIn, action)
 	}
 
+	// Filter want list
+	wantList := make(map[string]bool)
+	for _, want := range tmp.Want {
+		if want = strings.ToUpper(strings.TrimSpace(want)); want != "" {
+			wantList[want] = true
+		}
+	}
+
 	return &geoIPDatIn{
 		Type:        typeGeoIPdatIn,
 		Action:      action,
 		Description: descGeoIPdatIn,
 		URI:         tmp.URI,
-		Want:        tmp.Want,
+		Want:        wantList,
 		OnlyIPType:  tmp.OnlyIPType,
 	}, nil
 }
@@ -60,7 +68,7 @@ type geoIPDatIn struct {
 	Action      lib.Action
 	Description string
 	URI         string
-	Want        []string
+	Want        map[string]bool
 	OnlyIPType  lib.IPType
 }
 
@@ -81,7 +89,7 @@ func (g *geoIPDatIn) Input(container lib.Container) (lib.Container, error) {
 	var err error
 
 	switch {
-	case strings.HasPrefix(g.URI, "http://"), strings.HasPrefix(g.URI, "https://"):
+	case strings.HasPrefix(strings.ToLower(g.URI), "http://"), strings.HasPrefix(strings.ToLower(g.URI), "https://"):
 		err = g.walkRemoteFile(g.URI, entries)
 	default:
 		err = g.walkLocalFile(g.URI, entries)
@@ -92,7 +100,7 @@ func (g *geoIPDatIn) Input(container lib.Container) (lib.Container, error) {
 	}
 
 	if len(entries) == 0 {
-		return nil, fmt.Errorf("❌ [type %s | action %s] no entry is newly generated", typeGeoIPdatIn, g.Action)
+		return nil, fmt.Errorf("❌ [type %s | action %s] no entry is generated", typeGeoIPdatIn, g.Action)
 	}
 
 	var ignoreIPType lib.IgnoreIPOption
@@ -103,27 +111,18 @@ func (g *geoIPDatIn) Input(container lib.Container) (lib.Container, error) {
 		ignoreIPType = lib.IgnoreIPv4
 	}
 
-	// Filter want list
-	wantList := make(map[string]bool)
-	for _, want := range g.Want {
-		if want = strings.ToUpper(strings.TrimSpace(want)); want != "" {
-			wantList[want] = true
-		}
-	}
-
 	for _, entry := range entries {
-		name := entry.GetName()
-		if len(wantList) > 0 && !wantList[name] {
-			continue
-		}
-
 		switch g.Action {
 		case lib.ActionAdd:
 			if err := container.Add(entry, ignoreIPType); err != nil {
 				return nil, err
 			}
 		case lib.ActionRemove:
-			container.Remove(name, ignoreIPType)
+			if err := container.Remove(entry, lib.CaseRemovePrefix, ignoreIPType); err != nil {
+				return nil, err
+			}
+		default:
+			return nil, lib.ErrUnknownAction
 		}
 	}
 
@@ -174,26 +173,21 @@ func (g *geoIPDatIn) generateEntries(reader io.Reader, entries map[string]*lib.E
 	}
 
 	for _, geoip := range geoipList.Entry {
-		var entry *lib.Entry
-		name := geoip.CountryCode
-		if theEntry, found := entries[name]; found {
-			fmt.Printf("⚠️ [type %s | action %s] found duplicated entry: %s. Process anyway\n", typeGeoIPdatIn, g.Action, name)
-			entry = theEntry
-		} else {
+		name := strings.ToUpper(strings.TrimSpace(geoip.CountryCode))
+
+		if len(g.Want) > 0 && !g.Want[name] {
+			continue
+		}
+
+		entry, found := entries[name]
+		if !found {
 			entry = lib.NewEntry(name)
 		}
 
 		for _, v2rayCIDR := range geoip.Cidr {
 			ipStr := net.IP(v2rayCIDR.GetIp()).String() + "/" + fmt.Sprint(v2rayCIDR.GetPrefix())
-			switch g.Action {
-			case lib.ActionAdd:
-				if err := entry.AddPrefix(ipStr); err != nil {
-					return err
-				}
-			case lib.ActionRemove:
-				if err := entry.RemovePrefix(ipStr); err != nil {
-					return err
-				}
+			if err := entry.AddPrefix(ipStr); err != nil {
+				return err
 			}
 		}
 

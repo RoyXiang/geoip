@@ -57,13 +57,21 @@ func newGeoIPDat(action lib.Action, data json.RawMessage) (lib.OutputConverter, 
 		tmp.OutputDir = defaultOutputDir
 	}
 
+	// Filter want list
+	wantList := make([]string, 0, len(tmp.Want))
+	for _, want := range tmp.Want {
+		if want = strings.ToUpper(strings.TrimSpace(want)); want != "" {
+			wantList = append(wantList, want)
+		}
+	}
+
 	return &geoIPDatOut{
 		Type:           typeGeoIPdatOut,
 		Action:         action,
 		Description:    descGeoIPdatOut,
 		OutputName:     tmp.OutputName,
 		OutputDir:      tmp.OutputDir,
-		Want:           tmp.Want,
+		Want:           wantList,
 		OneFilePerList: tmp.OneFilePerList,
 		OnlyIPType:     tmp.OnlyIPType,
 	}, nil
@@ -93,20 +101,26 @@ func (g *geoIPDatOut) GetDescription() string {
 }
 
 func (g *geoIPDatOut) Output(container lib.Container) error {
-	// Filter want list
-	wantList := make(map[string]bool)
-	for _, want := range g.Want {
-		if want = strings.ToUpper(strings.TrimSpace(want)); want != "" {
-			wantList[want] = true
-		}
-	}
-
 	geoIPList := new(router.GeoIPList)
 	geoIPList.Entry = make([]*router.GeoIP, 0, 300)
 	updated := false
-	switch len(wantList) {
+
+	switch len(g.Want) {
 	case 0:
+		list := make([]string, 0, 300)
 		for entry := range container.Loop() {
+			list = append(list, entry.GetName())
+		}
+
+		// Sort the list
+		sort.Strings(list)
+
+		for _, name := range list {
+			entry, found := container.GetEntry(name)
+			if !found {
+				log.Printf("❌ entry %s not found", name)
+				continue
+			}
 			geoIP, err := g.generateGeoIP(entry)
 			if err != nil {
 				return err
@@ -128,7 +142,10 @@ func (g *geoIPDatOut) Output(container lib.Container) error {
 		}
 
 	default:
-		for name := range wantList {
+		// Sort the list
+		sort.Strings(g.Want)
+
+		for _, name := range g.Want {
 			entry, found := container.GetEntry(name)
 			if !found {
 				log.Printf("❌ entry %s not found", name)
@@ -155,10 +172,10 @@ func (g *geoIPDatOut) Output(container lib.Container) error {
 		}
 	}
 
-	// Sort to make reproducible builds
-	g.sort(geoIPList)
-
 	if !g.OneFilePerList && updated {
+		// Sort to make reproducible builds
+		g.sort(geoIPList)
+
 		geoIPBytes, err := proto.Marshal(geoIPList)
 		if err != nil {
 			return err

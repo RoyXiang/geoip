@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/Loyalsoldier/geoip/lib"
 )
@@ -23,15 +24,23 @@ type textOut struct {
 	Action      lib.Action
 	Description string
 	OutputDir   string
+	OutputExt   string
 	Want        []string
 	OnlyIPType  lib.IPType
+
+	AddPrefixInLine string
+	AddSuffixInLine string
 }
 
 func newTextOut(iType string, action lib.Action, data json.RawMessage) (lib.OutputConverter, error) {
 	var tmp struct {
 		OutputDir  string     `json:"outputDir"`
+		OutputExt  string     `json:"outputExtension"`
 		Want       []string   `json:"wantedList"`
 		OnlyIPType lib.IPType `json:"onlyIPType"`
+
+		AddPrefixInLine string `json:"addPrefixInLine"`
+		AddSuffixInLine string `json:"addSuffixInLine"`
 	}
 
 	if len(data) > 0 {
@@ -53,13 +62,29 @@ func newTextOut(iType string, action lib.Action, data json.RawMessage) (lib.Outp
 		}
 	}
 
+	if tmp.OutputExt == "" {
+		tmp.OutputExt = ".txt"
+	}
+
+	// Filter want list
+	wantList := make([]string, 0, len(tmp.Want))
+	for _, want := range tmp.Want {
+		if want = strings.ToUpper(strings.TrimSpace(want)); want != "" {
+			wantList = append(wantList, want)
+		}
+	}
+
 	return &textOut{
 		Type:        iType,
 		Action:      action,
 		Description: descTextOut,
 		OutputDir:   tmp.OutputDir,
-		Want:        tmp.Want,
+		OutputExt:   tmp.OutputExt,
+		Want:        wantList,
 		OnlyIPType:  tmp.OnlyIPType,
+
+		AddPrefixInLine: tmp.AddPrefixInLine,
+		AddSuffixInLine: tmp.AddSuffixInLine,
 	}, nil
 }
 
@@ -101,7 +126,13 @@ func (t *textOut) marshalBytes(entry *lib.Entry) ([]byte, error) {
 
 func (t *textOut) marshalBytesForTextOut(buf *bytes.Buffer, entryCidr []string) error {
 	for _, cidr := range entryCidr {
+		if t.AddPrefixInLine != "" {
+			buf.WriteString(t.AddPrefixInLine)
+		}
 		buf.WriteString(cidr)
+		if t.AddSuffixInLine != "" {
+			buf.WriteString(t.AddSuffixInLine)
+		}
 		buf.WriteString("\n")
 	}
 	return nil
@@ -149,6 +180,9 @@ func (t *textOut) marshalBytesForSurgeRuleSetOut(buf *bytes.Buffer, entryCidr []
 			buf.WriteString("IP-CIDR6,")
 		}
 		buf.WriteString(cidr)
+		if t.AddSuffixInLine != "" {
+			buf.WriteString(t.AddSuffixInLine)
+		}
 		buf.WriteString("\n")
 	}
 
