@@ -23,15 +23,6 @@
       "action": "add",
       "args": {
         "name": "cn",
-        "uri": "https://raw.githubusercontent.com/tmplink/IPDB/main/ipv6/cidr/CN.txt",
-        "onlyIPType": "ipv6"
-      }
-    },
-    {
-      "type": "text",
-      "action": "add",
-      "args": {
-        "name": "cn",
         "uri": "https://raw.githubusercontent.com/gaoyifan/china-operator-ip/ip-lists/china.txt",
         "onlyIPType": "ipv4"
       }
