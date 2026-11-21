@@ -5,74 +5,9 @@ import (
 	"strings"
 
 	"github.com/Loyalsoldier/geoip/lib"
+	"github.com/Loyalsoldier/geoip/plugin/special"
 	"github.com/spf13/cobra"
 )
-
-const tempConfig = `
-{
-  "input": [
-    {
-      "type": "stdin",
-      "action": "add",
-      "args": {
-        "name": "temp"
-      }
-    }
-  ],
-  "output": [
-    {
-      "type": "stdout",
-      "action": "output"
-    }
-  ]
-}
-`
-
-const tempConfigWithIPv4 = `
-{
-  "input": [
-    {
-      "type": "stdin",
-      "action": "add",
-      "args": {
-        "name": "temp"
-      }
-    }
-  ],
-  "output": [
-    {
-      "type": "stdout",
-      "action": "output",
-      "args": {
-        "onlyIPType": "ipv4"
-      }
-    }
-  ]
-}
-`
-
-const tempConfigWithIPv6 = `
-{
-  "input": [
-    {
-      "type": "stdin",
-      "action": "add",
-      "args": {
-        "name": "temp"
-      }
-    }
-  ],
-  "output": [
-    {
-      "type": "stdout",
-      "action": "output",
-      "args": {
-        "onlyIPType": "ipv6"
-      }
-    }
-  ]
-}
-`
 
 func init() {
 	rootCmd.AddCommand(mergeCmd)
@@ -91,27 +26,46 @@ var mergeCmd = &cobra.Command{
 			log.Fatal("invalid argument onlyiptype: ", otype)
 		}
 
-		var configBytes []byte
-		switch lib.IPType(otype) {
-		case lib.IPv4:
-			configBytes = []byte(tempConfigWithIPv4)
-		case lib.IPv6:
-			configBytes = []byte(tempConfigWithIPv6)
-		default:
-			configBytes = []byte(tempConfig)
-		}
-
 		instance, err := lib.NewInstance()
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		if err := instance.InitFromBytes(configBytes); err != nil {
-			log.Fatal(err)
-		}
+		instance.AddInput(getInputForMerge())
+		instance.AddOutput(getOutputForMerge(otype))
 
 		if err := instance.Run(); err != nil {
 			log.Fatal(err)
 		}
 	},
+}
+
+func getInputForMerge() lib.InputConverter {
+	input, err := special.NewStdin(
+		lib.ActionAdd,
+		special.WithStdinName("temp"),
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return input
+}
+
+func getOutputForMerge(otype string) lib.OutputConverter {
+	var onlyIPType lib.IPType
+	switch lib.IPType(otype) {
+	case lib.IPv4, lib.IPv6:
+		onlyIPType = lib.IPType(otype)
+	}
+
+	output, err := special.NewStdout(
+		lib.ActionOutput,
+		special.WithStdoutOnlyIPType(onlyIPType),
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return output
 }

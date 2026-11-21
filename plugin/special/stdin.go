@@ -11,42 +11,17 @@ import (
 )
 
 const (
-	typeStdin = "stdin"
-	descStdin = "Accept plaintext IP & CIDR from standard input, separated by newline"
+	TypeStdin = "stdin"
+	DescStdin = "Accept plaintext IP & CIDR from standard input, separated by newline"
 )
 
 func init() {
-	lib.RegisterInputConfigCreator(typeStdin, func(action lib.Action, data json.RawMessage) (lib.InputConverter, error) {
-		return newStdin(action, data)
+	lib.RegisterInputConfigCreator(TypeStdin, func(action lib.Action, data json.RawMessage) (lib.InputConverter, error) {
+		return NewStdinFromBytes(action, data)
 	})
-	lib.RegisterInputConverter(typeStdin, &stdin{
-		Description: descStdin,
+	lib.RegisterInputConverter(TypeStdin, &stdin{
+		Description: DescStdin,
 	})
-}
-
-func newStdin(action lib.Action, data json.RawMessage) (lib.InputConverter, error) {
-	var tmp struct {
-		Name       string     `json:"name"`
-		OnlyIPType lib.IPType `json:"onlyIPType"`
-	}
-
-	if len(data) > 0 {
-		if err := json.Unmarshal(data, &tmp); err != nil {
-			return nil, err
-		}
-	}
-
-	if tmp.Name == "" {
-		return nil, fmt.Errorf("❌ [type %s | action %s] missing name", typeStdin, action)
-	}
-
-	return &stdin{
-		Type:        typeStdin,
-		Action:      action,
-		Description: descStdin,
-		Name:        tmp.Name,
-		OnlyIPType:  tmp.OnlyIPType,
-	}, nil
 }
 
 type stdin struct {
@@ -55,6 +30,57 @@ type stdin struct {
 	Description string
 	Name        string
 	OnlyIPType  lib.IPType
+}
+
+func NewStdin(action lib.Action, opts ...lib.InputOption) (lib.InputConverter, error) {
+	s := &stdin{
+		Type:        TypeStdin,
+		Action:      action,
+		Description: DescStdin,
+	}
+
+	for _, opt := range opts {
+		if opt != nil {
+			opt(s)
+		}
+	}
+
+	if s.Name == "" {
+		return nil, fmt.Errorf("❌ [type %s | action %s] name must be specified", s.Type, s.Action)
+	}
+
+	return s, nil
+}
+
+func WithStdinName(name string) lib.InputOption {
+	return func(s lib.InputConverter) {
+		s.(*stdin).Name = strings.TrimSpace(name)
+	}
+}
+
+func WithStdinOnlyIPType(onlyIPType lib.IPType) lib.InputOption {
+	return func(s lib.InputConverter) {
+		s.(*stdin).OnlyIPType = onlyIPType
+	}
+}
+
+func NewStdinFromBytes(action lib.Action, data []byte) (lib.InputConverter, error) {
+	var tmp struct {
+		Name       string     `json:"name"`
+		OnlyIPType lib.IPType `json:"onlyIPType"`
+	}
+
+	if len(data) > 0 {
+		if err := json.Unmarshal(data, &tmp); err != nil {
+			return nil, fmt.Errorf("❌ [type %s | action %s] %w", TypeStdin, action, err)
+		}
+	}
+
+	return NewStdin(
+		action,
+		WithStdinName(tmp.Name),
+		WithStdinOnlyIPType(tmp.OnlyIPType),
+	)
 }
 
 func (s *stdin) GetType() string {
@@ -92,28 +118,22 @@ func (s *stdin) Input(container lib.Container) (lib.Container, error) {
 	}
 
 	if err := scanner.Err(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("❌ [type %s | action %s] %w", s.Type, s.Action, err)
 	}
 
-	var ignoreIPType lib.IgnoreIPOption
-	switch s.OnlyIPType {
-	case lib.IPv4:
-		ignoreIPType = lib.IgnoreIPv6
-	case lib.IPv6:
-		ignoreIPType = lib.IgnoreIPv4
-	}
+	ignoreIPType := lib.GetIgnoreIPType(s.OnlyIPType)
 
 	switch s.Action {
 	case lib.ActionAdd:
 		if err := container.Add(entry, ignoreIPType); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("❌ [type %s | action %s] %w", s.Type, s.Action, err)
 		}
 	case lib.ActionRemove:
 		if err := container.Remove(entry, lib.CaseRemovePrefix, ignoreIPType); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("❌ [type %s | action %s] %w", s.Type, s.Action, err)
 		}
 	default:
-		return nil, lib.ErrUnknownAction
+		return nil, fmt.Errorf("❌ [type %s | action %s] %w", s.Type, s.Action, lib.ErrUnknownAction)
 	}
 
 	return container, nil
